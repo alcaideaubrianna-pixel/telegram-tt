@@ -17,6 +17,14 @@ interface ImportMetaEnv {
   readonly TG_PUBLIC_URL: string;
   readonly TG_TELEGRAM_API_HASH?: string;
   readonly TG_TELEGRAM_API_ID?: string;
+  readonly TG_TELESRV_ALLOW_HTTP_TRANSPORT?: string;
+  readonly TG_TELESRV_INSTANCE_ID?: string;
+  readonly TG_TELESRV_RSA_EXPONENT?: string;
+  readonly TG_TELESRV_RSA_FINGERPRINT?: string;
+  readonly TG_TELESRV_RSA_MODULUS?: string;
+  readonly TG_TELESRV_WEB_DC_HOST?: string;
+  readonly TG_TELESRV_WEB_DC_PORT?: string;
+  readonly TG_TELESRV_WEB_DC_PROTOCOL?: string;
   readonly TG_TEST_SESSION?: string;
 }
 

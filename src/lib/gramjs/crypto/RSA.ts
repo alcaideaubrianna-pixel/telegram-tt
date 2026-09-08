@@ -1,3 +1,9 @@
+import {
+  IS_TELESRV_WEB_DC,
+  TELESRV_RSA_EXPONENT,
+  TELESRV_RSA_FINGERPRINT,
+  TELESRV_RSA_MODULUS,
+} from '../../../config';
 import { concat } from '../../../util/encoding/buffer';
 
 import {
@@ -8,7 +14,7 @@ import {
   sha1,
 } from '../Helpers';
 
-export const SERVER_KEYS = [
+const BUILTIN_SERVER_KEYS = [
   {
     fingerprint: BigInt('-3414540481677951611'),
     n: BigInt(
@@ -33,7 +39,18 @@ export const SERVER_KEYS = [
     ),
     e: 65537,
   },
-].reduce((acc, { fingerprint, ...keyInfo }) => {
+];
+
+const serverKeys = [...BUILTIN_SERVER_KEYS];
+if (IS_TELESRV_WEB_DC && TELESRV_RSA_FINGERPRINT && TELESRV_RSA_MODULUS) {
+  serverKeys.push({
+    fingerprint: BigInt(TELESRV_RSA_FINGERPRINT),
+    n: BigInt(TELESRV_RSA_MODULUS),
+    e: TELESRV_RSA_EXPONENT,
+  });
+}
+
+export const SERVER_KEYS = serverKeys.reduce((acc, { fingerprint, ...keyInfo }) => {
   acc.set(fingerprint, keyInfo);
   return acc;
 }, new Map<bigint, { n: bigint; e: number }>());

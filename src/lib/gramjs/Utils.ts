@@ -1,5 +1,10 @@
 import type { Entity } from './types';
 
+import {
+  IS_TELESRV_WEB_DC,
+  TELESRV_WEB_DC_HOST,
+  TELESRV_WEB_DC_PORT,
+} from '../../config';
 import { bufferFromHex, concat } from '../../util/encoding/buffer';
 import { Api } from './tl';
 
@@ -180,6 +185,14 @@ export function getDisplayName(entity: Entity) {
  * @return {{port: number, ipAddress: string, id: number}}
  */
 export function getDC(dcId: number, downloadDC = false) {
+  if (IS_TELESRV_WEB_DC) {
+    return {
+      id: dcId,
+      ipAddress: TELESRV_WEB_DC_HOST,
+      port: TELESRV_WEB_DC_PORT,
+    };
+  }
+
   // TODO Move to external config
   switch (dcId) {
     case 1:

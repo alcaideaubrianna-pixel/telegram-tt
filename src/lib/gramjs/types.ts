@@ -21,4 +21,5 @@ export interface SessionData {
   mainDcId: number;
   keys: Record<number, string>;
   isTest?: true;
+  telesrvInstanceId?: string;
 }

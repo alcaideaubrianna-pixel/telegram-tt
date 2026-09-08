@@ -41,6 +41,15 @@ export const INACTIVE_MARKER = '[Inactive]';
 export const TELEGRAM_API_ID = Number(import.meta.env.TG_TELEGRAM_API_ID);
 export const TELEGRAM_API_HASH = import.meta.env.TG_TELEGRAM_API_HASH;
 export const TEST_SESSION = import.meta.env.TG_TEST_SESSION;
+export const TELESRV_WEB_DC_HOST = import.meta.env.TG_TELESRV_WEB_DC_HOST || '';
+export const TELESRV_WEB_DC_PORT = Number(import.meta.env.TG_TELESRV_WEB_DC_PORT) || 0;
+export const TELESRV_WEB_DC_PROTOCOL = import.meta.env.TG_TELESRV_WEB_DC_PROTOCOL || 'wss';
+export const TELESRV_RSA_FINGERPRINT = import.meta.env.TG_TELESRV_RSA_FINGERPRINT;
+export const TELESRV_RSA_MODULUS = import.meta.env.TG_TELESRV_RSA_MODULUS;
+export const TELESRV_RSA_EXPONENT = Number(import.meta.env.TG_TELESRV_RSA_EXPONENT) || 65537;
+export const TELESRV_ALLOW_HTTP_TRANSPORT = import.meta.env.TG_TELESRV_ALLOW_HTTP_TRANSPORT === '1';
+export const TELESRV_INSTANCE_ID = import.meta.env.TG_TELESRV_INSTANCE_ID || '';
+export const IS_TELESRV_WEB_DC = Boolean(TELESRV_WEB_DC_HOST && TELESRV_WEB_DC_PORT);
 
 export const DEBUG_PAYMENT_SMART_GLOCAL = false;
 

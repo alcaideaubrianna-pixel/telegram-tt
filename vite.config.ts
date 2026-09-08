@@ -85,10 +85,18 @@ export default defineConfig(({ mode }): UserConfig => {
   const appleIcon = isProductionApp ? 'apple-touch-icon' : 'apple-touch-icon-dev';
   const mainIcon = isProductionApp ? 'icon-192x192' : 'icon-dev-192x192';
   const manifest = isProductionApp ? 'site.webmanifest' : 'site_dev.webmanifest';
-  const csp = buildCsp(appEnv);
   const isDevelopmentMode = mode === 'development';
   const telegramApiId = env.TELEGRAM_API_ID || '';
   const telegramApiHash = env.TELEGRAM_API_HASH || '';
+  const telesrvWebDcHost = env.TELESRV_WEB_DC_HOST || '';
+  const telesrvWebDcPort = env.TELESRV_WEB_DC_PORT || '';
+  const telesrvWebDcProtocol = env.TELESRV_WEB_DC_PROTOCOL || 'wss';
+  const telesrvRsaFingerprint = env.TELESRV_RSA_FINGERPRINT || '';
+  const telesrvRsaModulus = env.TELESRV_RSA_MODULUS || '';
+  const telesrvRsaExponent = env.TELESRV_RSA_EXPONENT || '65537';
+  const telesrvAllowHttpTransport = env.TELESRV_ALLOW_HTTP_TRANSPORT || '0';
+  const telesrvInstanceId = env.TELESRV_INSTANCE_ID || '';
+  const csp = buildCsp(appEnv, telesrvWebDcHost, telesrvWebDcPort, telesrvWebDcProtocol);
   const workerReportBundles: OutputBundle[] = [];
   const plugins: PluginOption[] = [
     buildGitInfoPlugin({
@@ -171,6 +179,42 @@ export default defineConfig(({ mode }): UserConfig => {
     throw new Error('Missing required Telegram API credentials');
   }
 
+  const hasTelesrvEndpoint = Boolean(telesrvWebDcHost || telesrvWebDcPort);
+  if (hasTelesrvEndpoint && (!telesrvWebDcHost || !telesrvWebDcPort)) {
+    throw new Error('TELESRV_WEB_DC_HOST and TELESRV_WEB_DC_PORT must be configured together');
+  }
+  if (telesrvWebDcHost && /[\s/:]/.test(telesrvWebDcHost)) {
+    throw new Error('TELESRV_WEB_DC_HOST must be a hostname or IPv4 address without a protocol, port, or path');
+  }
+  const parsedTelesrvWebDcPort = Number(telesrvWebDcPort);
+  if (telesrvWebDcPort && (!Number.isInteger(parsedTelesrvWebDcPort)
+    || parsedTelesrvWebDcPort < 1 || parsedTelesrvWebDcPort > 65535)) {
+    throw new Error('TELESRV_WEB_DC_PORT must be an integer between 1 and 65535');
+  }
+  const hasTelesrvRsa = Boolean(telesrvRsaFingerprint || telesrvRsaModulus);
+  if (hasTelesrvRsa && (!telesrvRsaFingerprint || !telesrvRsaModulus)) {
+    throw new Error('TELESRV_RSA_FINGERPRINT and TELESRV_RSA_MODULUS must be configured together');
+  }
+  if (hasTelesrvRsa && !hasTelesrvEndpoint) {
+    throw new Error('A telesrv endpoint is required when configuring a telesrv RSA key');
+  }
+  if (!['ws', 'wss'].includes(telesrvWebDcProtocol)) {
+    throw new Error('TELESRV_WEB_DC_PROTOCOL must be ws or wss');
+  }
+  if (!['0', '1'].includes(telesrvAllowHttpTransport)) {
+    throw new Error('TELESRV_ALLOW_HTTP_TRANSPORT must be 0 or 1');
+  }
+  try {
+    if (telesrvRsaFingerprint) BigInt(telesrvRsaFingerprint);
+    if (telesrvRsaModulus) BigInt(telesrvRsaModulus);
+  } catch {
+    throw new Error('TELESRV_RSA_FINGERPRINT and TELESRV_RSA_MODULUS must be integers');
+  }
+  const parsedTelesrvRsaExponent = Number(telesrvRsaExponent);
+  if (!Number.isInteger(parsedTelesrvRsaExponent) || parsedTelesrvRsaExponent < 1) {
+    throw new Error('TELESRV_RSA_EXPONENT must be a positive integer');
+  }
+
   setViteEnv({
     TG_APP_ENV: appEnv,
     TG_APP_MOCKED_CLIENT: appMockedClient,
@@ -183,6 +227,14 @@ export default defineConfig(({ mode }): UserConfig => {
     TG_MANIFEST: manifest,
     TG_TELEGRAM_API_ID: telegramApiId,
     TG_TELEGRAM_API_HASH: telegramApiHash,
+    TG_TELESRV_WEB_DC_HOST: telesrvWebDcHost,
+    TG_TELESRV_WEB_DC_PORT: telesrvWebDcPort,
+    TG_TELESRV_WEB_DC_PROTOCOL: telesrvWebDcProtocol,
+    TG_TELESRV_RSA_FINGERPRINT: telesrvRsaFingerprint,
+    TG_TELESRV_RSA_MODULUS: telesrvRsaModulus,
+    TG_TELESRV_RSA_EXPONENT: telesrvRsaExponent,
+    TG_TELESRV_ALLOW_HTTP_TRANSPORT: telesrvAllowHttpTransport,
+    TG_TELESRV_INSTANCE_ID: telesrvInstanceId,
     TG_TEST_SESSION: env.TEST_SESSION || '',
   });
 
@@ -296,10 +348,12 @@ function setViteEnv(env: Record<string, string>) {
   });
 }
 
-function buildCsp(appEnv: string) {
+function buildCsp(appEnv: string, telesrvHost: string, telesrvPort: string, telesrvProtocol: string) {
+  const telesrvOrigin = telesrvHost && telesrvPort ? `${telesrvProtocol}://${telesrvHost}:${telesrvPort}` : '';
   return `
   default-src 'self';
-  connect-src 'self' wss://*.web.telegram.org blob: http: https: ${appEnv === 'development' ? 'wss: ipc:' : ''};
+  connect-src 'self' wss://*.web.telegram.org blob: http: https: ${telesrvOrigin}
+    ${appEnv === 'development' ? 'wss: ipc:' : ''};
   script-src 'self' 'wasm-unsafe-eval'
     https://t.me/_websync_ https://telegram.me/_websync_ https://telegram.dog/_websync_;
   worker-src 'self'${appEnv === 'development' ? ' blob:' : ''};

@@ -13,6 +13,7 @@ import type { UserAuthParams } from './auth';
 import type { DownloadFileParams, DownloadFileWithDcParams, DownloadMediaParams } from './downloadFile';
 import type { UploadFileParams } from './uploadFile';
 
+import { IS_TELESRV_WEB_DC, TELESRV_ALLOW_HTTP_TRANSPORT } from '../../../config';
 import Deferred from '../../../util/Deferred';
 import { concat } from '../../../util/encoding/buffer';
 import { toJSNumber } from '../../../util/numbers';
@@ -122,6 +123,10 @@ const sizeTypeRanks: Record<SizeType, number> = sizeTypes.reduce((acc, sizeType,
   return acc;
 }, {} as Record<SizeType, number>);
 
+function normalizeHttpTransportFlag(value: boolean) {
+  return IS_TELESRV_WEB_DC ? TELESRV_ALLOW_HTTP_TRANSPORT && value : value;
+}
+
 class TelegramClient {
   static DEFAULT_OPTIONS: Partial<TelegramClientParams> = {
     connection: ConnectionTCPObfuscated,
@@ -227,8 +232,8 @@ class TelegramClient {
     this.apiHash = apiHash;
     this.defaultDcId = args.dcId || DEFAULT_DC_ID;
     this._useIPV6 = args.useIPV6;
-    this._shouldForceHttpTransport = args.shouldForceHttpTransport;
-    this._shouldAllowHttpTransport = args.shouldAllowHttpTransport;
+    this._shouldForceHttpTransport = normalizeHttpTransportFlag(args.shouldForceHttpTransport);
+    this._shouldAllowHttpTransport = normalizeHttpTransportFlag(args.shouldAllowHttpTransport);
     this._shouldDebugExportedSenders = args.shouldDebugExportedSenders;
     // this._entityCache = new Set()
     if (typeof args.baseLogger === 'string') {
@@ -366,7 +371,7 @@ class TelegramClient {
       const DC = getDC(this.defaultDcId);
       // TODO Fill IP addresses for when `this._useIPV6` is used
       this.session.setDC(
-        this.defaultDcId, DC.ipAddress, this._args.useWSS ? 443 : 80, this._args.isTestServerRequested,
+        this.defaultDcId, DC.ipAddress, DC.port, this._args.isTestServerRequested,
       );
     }
   }
@@ -376,14 +381,17 @@ class TelegramClient {
   }
 
   async setForceHttpTransport(forceHttpTransport: boolean) {
-    this._shouldForceHttpTransport = forceHttpTransport;
+    this._shouldForceHttpTransport = normalizeHttpTransportFlag(forceHttpTransport);
     this.disconnect();
     this._sender = undefined;
     await this.connect();
   }
 
   async setAllowHttpTransport(allowHttpTransport: boolean) {
-    this._shouldAllowHttpTransport = allowHttpTransport;
+    this._shouldAllowHttpTransport = normalizeHttpTransportFlag(allowHttpTransport);
+    if (!this._shouldAllowHttpTransport) {
+      this._shouldForceHttpTransport = false;
+    }
     this.disconnect();
     this._sender = undefined;
     await this.connect();

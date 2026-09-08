@@ -1,5 +1,6 @@
 import type { SessionData } from '../types';
 
+import { TELESRV_INSTANCE_ID } from '../../../config';
 import { bufferFromHex, bufferToHex } from '../../../util/encoding/buffer';
 
 import { AuthKey } from '../crypto/AuthKey';
@@ -31,6 +32,7 @@ export default class CallbackSession extends MemorySession {
       mainDcId,
       keys,
       isTest,
+      telesrvInstanceId,
     } = this._sessionData;
     const {
       ipAddress,
@@ -39,7 +41,8 @@ export default class CallbackSession extends MemorySession {
 
     this.setDC(mainDcId, ipAddress, port, isTest, true);
 
-    await Promise.all(Object.keys(keys)
+    const areAuthKeysCompatible = telesrvInstanceId === (TELESRV_INSTANCE_ID || undefined);
+    await Promise.all(Object.keys(areAuthKeysCompatible ? keys : {})
       .map(async (dcIdStr) => {
         const dcId = Number(dcIdStr);
         const key = bufferFromHex(keys[dcId]);
@@ -77,6 +80,7 @@ export default class CallbackSession extends MemorySession {
       mainDcId: this._dcId,
       keys: {},
       isTest: this._isTestServer || undefined,
+      telesrvInstanceId: TELESRV_INSTANCE_ID || undefined,
     };
 
     Object

@@ -1,5 +1,6 @@
 import { Mutex } from 'async-mutex';
 
+import { IS_TELESRV_WEB_DC, TELESRV_WEB_DC_PROTOCOL } from '../../../config';
 import { concat } from '../../../util/encoding/buffer';
 
 const closeError = new Error('WebSocket was closed');
@@ -79,11 +80,8 @@ export default class PromisedWebSockets {
   }
 
   getWebSocketLink(ip: string, port: number, isTestServer?: boolean, isPremium?: boolean) {
-    if (port === 443) {
-      return `wss://${ip}:${port}/apiws${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
-    } else {
-      return `ws://${ip}:${port}/apiws${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
-    }
+    const protocol = getWebSocketProtocol(port);
+    return `${protocol}://${ip}:${port}/apiws${isTestServer ? '_test' : ''}${isPremium ? '_premium' : ''}`;
   }
 
   connect(port: number, ip: string, isTestServer = false, isPremium = false) {
@@ -181,4 +179,10 @@ export default class PromisedWebSockets {
       });
     };
   }
+}
+
+function getWebSocketProtocol(port: number) {
+  if (IS_TELESRV_WEB_DC) return TELESRV_WEB_DC_PROTOCOL;
+
+  return port === 443 ? 'wss' : 'ws';
 }

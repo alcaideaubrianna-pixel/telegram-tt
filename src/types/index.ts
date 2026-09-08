@@ -69,6 +69,7 @@ export type SharedSessionData = {
   date?: number;
   dcId: number;
   isTest?: true;
+  telesrvInstanceId?: string;
 } & Partial<Record<`dc${DcId}_${'auth_key' | 'server_salt'}`, string>> & SessionUserInfo;
 
 export type AccountInfo = {

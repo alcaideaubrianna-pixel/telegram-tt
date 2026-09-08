@@ -144,6 +144,7 @@ export interface ApiSessionData {
   mainDcId: number;
   keys: Record<number, string>;
   isTest?: true;
+  telesrvInstanceId?: string;
 }
 
 export type ApiNotification = {

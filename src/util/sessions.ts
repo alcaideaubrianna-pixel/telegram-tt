@@ -36,7 +36,7 @@ export function hasStoredSession() {
 
 export function storeSession(sessionData: ApiSessionData) {
   const {
-    mainDcId, keys, isTest,
+    mainDcId, keys, isTest, telesrvInstanceId,
   } = sessionData;
 
   const currentSlotData = loadSlotSession(ACCOUNT_SLOT);
@@ -44,7 +44,15 @@ export function storeSession(sessionData: ApiSessionData) {
     ...currentSlotData,
     dcId: mainDcId,
     isTest,
+    telesrvInstanceId,
   };
+
+  if (currentSlotData?.telesrvInstanceId !== telesrvInstanceId) {
+    DC_IDS.forEach((dcId) => {
+      delete newSlotData[`dc${dcId}_auth_key`];
+      delete newSlotData[`dc${dcId}_server_salt`];
+    });
+  }
 
   Object.keys(keys).map(Number).forEach((dcId) => {
     newSlotData[`dc${dcId as DcId}_auth_key`] = keys[dcId];
@@ -115,6 +123,7 @@ export function loadStoredSession(): ApiSessionData | undefined {
       return acc;
     }, {} as Record<number, string>),
     isTest: slotData.isTest || undefined,
+    telesrvInstanceId: slotData.telesrvInstanceId,
   };
 
   return sessionData;
