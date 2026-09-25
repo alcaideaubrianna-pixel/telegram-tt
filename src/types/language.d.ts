@@ -570,6 +570,7 @@ export interface LangPair {
   'AboutPremiumDescription': undefined;
   'AboutPremiumDescription2': undefined;
   'OpenUrlTitle': undefined;
+  'OpenUrlWarning': undefined;
   'OpenUrlConfirm': undefined;
   'BotAuthAppSubtitle': undefined;
   'BotAuthSiteSubtitle': undefined;
@@ -706,6 +707,10 @@ export interface LangPair {
   'EphemeralOnlyVisible': undefined;
   'EphemeralContextMenuNotice': undefined;
   'EphemeralReplyUnavailable': undefined;
+  'EphemeralRevert': undefined;
+  'EphemeralRevertDescription': undefined;
+  'EphemeralAnchoredNotice': undefined;
+  'EphemeralUpdated': undefined;
   'NoStickers': undefined;
   'ClearRecentEmoji': undefined;
   'Save': undefined;
@@ -913,6 +918,7 @@ export interface LangPair {
   'EditAdminWhatCanDo': undefined;
   'EditAdminChangeChannelInfo': undefined;
   'EditAdminChangeGroupInfo': undefined;
+  'EditAdminManageWelcomeMessages': undefined;
   'EditAdminPostMessages': undefined;
   'EditAdminEditMessages': undefined;
   'EditAdminDeleteMessages': undefined;
@@ -1243,9 +1249,30 @@ export interface LangPair {
   'SettingsFolderCreate': undefined;
   'SettingsFoldersEmpty': undefined;
   'SettingsPasscodeSuccess': undefined;
-  'SettingsPasscodeEnabled': undefined;
   'SettingsPasscodeStart1': undefined;
   'SettingsPasscodeStart2': undefined;
+  'PasscodeTooManyAttempts': undefined;
+  'PasscodeUsePasskey': undefined;
+  'PasscodePasskeyTitle': undefined;
+  'PasscodePasskeyName': undefined;
+  'PasscodePasskeyEnable': undefined;
+  'PasscodePasskeyDescription': undefined;
+  'PasscodePasskeyError': undefined;
+  'PasscodePasskeyUnsupported': undefined;
+  'PasscodePasskeyRemovedChange': undefined;
+  'PasscodeLockScreenTitle': undefined;
+  'PasscodeKeepBackground': undefined;
+  'PasscodeKeepBackgroundInfo': undefined;
+  'PasscodeAutoLockTitle': undefined;
+  'PasscodeAutoLockDisabled': undefined;
+  'PasscodeAutoLock1Min': undefined;
+  'PasscodeAutoLock5Min': undefined;
+  'PasscodeAutoLock30Min': undefined;
+  'PasscodeAutoLock1Hour': undefined;
+  'PasscodeDataCorrupted': undefined;
+  'PasscodeLogOutAllAccounts': undefined;
+  'PasscodeLogOutAllConfirm': undefined;
+  'PasscodeForgotHelpLink': undefined;
   'CurrentPasswordPlaceholder': undefined;
   'ChangeYourProfilePicture': undefined;
   'AppInactiveOtherClientTitle': undefined;
@@ -1264,6 +1291,16 @@ export interface LangPair {
   'AudioPlayerClose': undefined;
   'AudioAddToProfile': undefined;
   'AudioRemoveFromProfile': undefined;
+  'AudioOpenPlaylist': undefined;
+  'AudioRepeatOff': undefined;
+  'AudioRepeatList': undefined;
+  'AudioRepeatSong': undefined;
+  'AudioPlaybackOrder': undefined;
+  'AudioShuffleList': undefined;
+  'AudioReverseOrder': undefined;
+  'AudioShowInChat': undefined;
+  'AudioVolume': undefined;
+  'AudioPlaybackRate': undefined;
   'AudioSaveToMyProfileSaved': undefined;
   'AudioSaveToMyProfileUnsaved': undefined;
   'DeleteForMeDescription': undefined;
@@ -1448,6 +1485,7 @@ export interface LangPair {
   'MenuReportBug': undefined;
   'MenuBetaChangelog': undefined;
   'MenuSwitchToK': undefined;
+  'PasscodeSwitchToKInfo': undefined;
   'MenuInstallApp': undefined;
   'MenuMyProfile': undefined;
   'MenuSavedMessages': undefined;
@@ -1664,8 +1702,8 @@ export interface LangPair {
   'ProfileTabStories': undefined;
   'ProfileTabStoriesArchive': undefined;
   'ProfileTabGifts': undefined;
-  'ProfileTabPlaylist': undefined;
-  'ProfilePlaylistEmpty': undefined;
+  'Playlist': undefined;
+  'PlaylistYourTitle': undefined;
   'ProfileTabSubscribers': undefined;
   'ProfileTabMembers': undefined;
   'ProfileTabBotPreview': undefined;
@@ -1675,6 +1713,8 @@ export interface LangPair {
   'ProfileTabMusic': undefined;
   'ProfileTabVoice': undefined;
   'ProfileTabGifs': undefined;
+  'ProfileTabPolls': undefined;
+  'ProfilePollsEmpty': undefined;
   'ProfileTabSharedGroups': undefined;
   'ProfileTabSimilarChannels': undefined;
   'ProfileTabSimilarBots': undefined;
@@ -1972,6 +2012,8 @@ export interface LangPair {
   'SubscribeToTelegramPremiumForAppendToDo': undefined;
   'ToDoListErrorChooseTitle': undefined;
   'ToDoListErrorChooseTasks': undefined;
+  'ToDoListTasksLimitReached': undefined;
+  'ToDoListTasksTitle': undefined;
   'PremiumPreviewTodo': undefined;
   'PremiumPreviewAiTools': undefined;
   'PremiumPreviewAiToolsDescription': undefined;
@@ -2287,6 +2329,8 @@ export interface LangPair {
   'RankEditSave': undefined;
   'RankEditTextOwn': undefined;
   'MenuAddCaption': undefined;
+  'AudioForwardedToChat': undefined;
+  'AudioForwardedToSaved': undefined;
   'MenuCopyDate': undefined;
   'DateCopiedToast': undefined;
   'ReminderSetToast': undefined;
@@ -2352,6 +2396,35 @@ export interface LangPair {
   'SettingsPerformanceDesc': undefined;
   'SettingsStickersDesc': undefined;
   'SettingsSessionsDesc': undefined;
+  'WebLoginInvalid': undefined;
+  'RichButtons': undefined;
+  'RichButtonInline': undefined;
+  'RichButtonRow': undefined;
+  'RichButtonEdit': undefined;
+  'RichButtonAdd': undefined;
+  'RichButtonRemove': undefined;
+  'RichButtonEarlier': undefined;
+  'RichButtonLater': undefined;
+  'RichButtonAction': undefined;
+  'RichButtonUrl': undefined;
+  'RichButtonProfile': undefined;
+  'RichButtonCopy': undefined;
+  'RichButtonDisabled': undefined;
+  'RichButtonUserId': undefined;
+  'RichButtonSelectUser': undefined;
+  'RichButtonUnknownUser': undefined;
+  'RichButtonInvalidUrl': undefined;
+  'RichButtonStyle': undefined;
+  'RichButtonDefault': undefined;
+  'RichButtonPrimary': undefined;
+  'RichButtonDanger': undefined;
+  'RichButtonSuccess': undefined;
+  'RichButtonAlign': undefined;
+  'RichButtonStretch': undefined;
+  'RichButtonLeft': undefined;
+  'RichButtonCenter': undefined;
+  'RichButtonRight': undefined;
+  'RichEditorButtonCopyText': undefined;
 }
 
 export interface LangPairWithVariables<V = LangVariable> {
@@ -2806,6 +2879,9 @@ export interface LangPairWithVariables<V = LangVariable> {
   'AtDateAgo': {
     'date': V;
   };
+  'PasscodeForgotHelp': {
+    'logOut': V;
+  };
   'MediaViewDownloading': {
     'count': V;
   };
@@ -3085,6 +3161,9 @@ export interface LangPairWithVariables<V = LangVariable> {
   };
   'FolderLinkNotificationUpdatedTitle': {
     'title': V;
+  };
+  'PlaylistTitle': {
+    'peer': V;
   };
   'LocationPermissionText': {
     'name': V;

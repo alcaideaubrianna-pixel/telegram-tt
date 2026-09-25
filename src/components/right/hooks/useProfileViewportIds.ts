@@ -12,7 +12,7 @@ import sortChatIds from '../../common/helpers/sortChatIds';
 import useInfiniteScroll from '../../../hooks/useInfiniteScroll';
 import useSyncEffect from '../../../hooks/useSyncEffect';
 
-const SHARED_MEDIA_TYPES: SharedMediaType[] = ['media', 'documents', 'links', 'audio', 'voice', 'gif'];
+const SHARED_MEDIA_TYPES: SharedMediaType[] = ['media', 'documents', 'links', 'audio', 'voice', 'gif', 'polls'];
 
 export default function useProfileViewportIds({
   loadMoreMembers,
@@ -21,7 +21,6 @@ export default function useProfileViewportIds({
   loadStories,
   loadStoriesArchive,
   loadMoreGifts,
-  loadSavedMusic,
   tabType,
   mediaSearchType,
   groupChatMembers,
@@ -34,7 +33,6 @@ export default function useProfileViewportIds({
   threadId,
   storyIds,
   giftIds,
-  playlistIds,
   pinnedStoryIds,
   archiveStoryIds,
   similarChannels,
@@ -46,7 +44,6 @@ export default function useProfileViewportIds({
   loadStories: AnyToVoidFunction;
   loadStoriesArchive: AnyToVoidFunction;
   loadMoreGifts: AnyToVoidFunction;
-  loadSavedMusic: AnyToVoidFunction;
   tabType: ProfileTabType;
   mediaSearchType?: SharedMediaType;
   groupChatMembers?: ApiChatMember[];
@@ -59,7 +56,6 @@ export default function useProfileViewportIds({
   threadId?: ThreadId;
   storyIds?: number[];
   giftIds?: string[];
-  playlistIds?: string[];
   pinnedStoryIds?: number[];
   archiveStoryIds?: number[];
   similarChannels?: string[];
@@ -116,12 +112,12 @@ export default function useProfileViewportIds({
     'voice', resultType, searchMessages, chatMessages, foundIds, threadId,
   );
 
-  const [commonChatViewportIds, getMoreCommonChats, noProfileInfoForCommonChats] = useInfiniteScrollForLoadableItems(
-    loadCommonChats, chatIds,
+  const [pollViewportIds, getMorePolls, noProfileInfoForPolls] = useInfiniteScrollForSharedMedia(
+    'polls', resultType, searchMessages, chatMessages, foundIds, threadId,
   );
 
-  const [savedMusicViewportIds, getMoreSavedMusic, noProfileInfoForSavedMusic] = useInfiniteScrollForLoadableItems(
-    loadSavedMusic, playlistIds,
+  const [commonChatViewportIds, getMoreCommonChats, noProfileInfoForCommonChats] = useInfiniteScrollForLoadableItems(
+    loadCommonChats, chatIds,
   );
 
   const sortedStoryIds = useMemo(() => {
@@ -193,10 +189,10 @@ export default function useProfileViewportIds({
       getMore = getMoreVoices;
       noProfileInfo = noProfileInfoForVoices;
       break;
-    case 'playlist':
-      viewportIds = savedMusicViewportIds;
-      getMore = getMoreSavedMusic;
-      noProfileInfo = noProfileInfoForSavedMusic;
+    case 'polls':
+      viewportIds = pollViewportIds;
+      getMore = getMorePolls;
+      noProfileInfo = noProfileInfoForPolls;
       break;
     case 'stories':
       viewportIds = storyViewportIds;

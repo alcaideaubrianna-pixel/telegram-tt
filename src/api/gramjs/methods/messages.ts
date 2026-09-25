@@ -68,11 +68,16 @@ import {
   buildThreadReadState,
 } from '../apiBuilders/chats';
 import {
-  buildApiAiComposeTone, buildApiAiComposeToneExample, buildApiComposedMessageWithAI, buildApiFormattedText,
+  buildApiAiComposeTone,
+  buildApiAiComposeToneExample,
+  buildApiComposedMessageWithAI,
+  buildApiFormattedText,
 } from '../apiBuilders/common';
 import { buildApiTopicWithState } from '../apiBuilders/forums';
 import {
-  buildMessageMediaContent, buildMessagePollFromMedia, buildMessageTextContent,
+  buildMessageMediaContent,
+  buildMessagePollFromMedia,
+  buildMessageTextContent,
   buildWebPage,
   buildWebPageFromMedia,
   buildWebPagesFromMedia,
@@ -129,7 +134,9 @@ import { sendApiUpdate } from '../updates/apiUpdateEmitter';
 import { processMessageAndUpdateThreadInfo } from '../updates/entityProcessor';
 import { processAffectedHistory, updateChannelState } from '../updates/updateManager';
 import { requestChatUpdate } from './chats';
-import { handleGramJsUpdate, invokeRequest, uploadFile } from './client';
+import {
+  handleGramJsUpdate, invokeRequest, repairFileReference, uploadFile,
+} from './client';
 
 const FAST_SEND_TIMEOUT = 1000;
 const INPUT_WAVEFORM_LENGTH = 63;
@@ -365,7 +372,7 @@ export function sendMessageLocal(
 ) {
   const {
     chat, lastMessageId, text, entities, richMessage, replyInfo, suggestedPostInfo,
-    attachment, sticker, story, gif, poll, todo,
+    attachment, sticker, story, gif, audio, poll, todo,
     contact, scheduledAt, scheduleRepeatPeriod, groupedId, sendAs, wasDrafted, isInvertedMedia, effectId, isPending,
     messagePriceInStars, dice,
   } = params;
@@ -386,6 +393,7 @@ export function sendMessageLocal(
     attachment,
     sticker,
     gif,
+    audio,
     poll,
     todo,
     contact,
@@ -420,7 +428,7 @@ export function sendApiMessage(
 ) {
   const {
     chat, text, entities, richMessage, replyInfo, suggestedPostInfo, suggestedMedia,
-    attachment, sticker, story, gif, poll, todo, contact, dice,
+    attachment, sticker, story, gif, audio, poll, todo, contact, dice,
 
     isSilent, scheduledAt, scheduleRepeatPeriod, groupedId, noWebPage, sendAs, shouldUpdateStickerSetOrder,
     isInvertedMedia, effectId, webPageMediaSize, webPageUrl, messagePriceInStars,
@@ -523,6 +531,8 @@ export function sendApiMessage(
       media = buildInputMediaDocument(sticker);
     } else if (gif) {
       media = buildInputMediaDocument(gif);
+    } else if (audio) {
+      media = buildInputMediaDocument(audio);
     } else if (poll) {
       try {
         const attachedMedia = poll.attachedMedia
@@ -600,16 +610,26 @@ export function sendApiMessage(
       suggestedPost: suggestedPostInfo && buildInputSuggestedPost(suggestedPostInfo),
     };
 
+    const sendMedia = (inputMedia: GramJs.TypeInputMedia) => invokeRequest(new GramJs.messages.SendMedia({
+      ...args,
+      media: inputMedia,
+    }), {
+      shouldThrow: true,
+      shouldIgnoreUpdates: true,
+    });
+
     try {
       let update;
       if (media) {
-        update = await invokeRequest(new GramJs.messages.SendMedia({
-          ...args,
-          media,
-        }), {
-          shouldThrow: true,
-          shouldIgnoreUpdates: true,
-        });
+        try {
+          update = await sendMedia(media);
+        } catch (error: any) {
+          if (!audio || !error.errorMessage?.startsWith('FILE_REFERENCE')) throw error;
+          if (!await repairFileReference({ url: `document${audio.id}` })) throw error;
+          const repairedMedia = buildInputMediaDocument(audio);
+          if (!repairedMedia) throw error;
+          update = await sendMedia(repairedMedia);
+        }
       } else {
         update = await invokeRequest(new GramJs.messages.SendMessage({
           ...args,
@@ -725,13 +745,18 @@ export async function sendEphemeralMessage({
       return undefined;
     }
 
+    const inputRichMessage = richMessage && buildInputRichMessage(richMessage);
+    if (richMessage && !inputRichMessage) {
+      markEphemeralMessageAsFailed(localMessage);
+      return undefined;
+    }
     const result = await invokeRequest(new GramJs.ephemeral.SendMessage({
       peer: buildInputPeer(chat.id, chat.accessHash),
       receiverId: buildInputUser(receiver.id, receiver.accessHash),
       message: richMessage ? DEFAULT_PRIMITIVES.STRING : text || DEFAULT_PRIMITIVES.STRING,
       entities: richMessage ? undefined : entities?.map(buildMtpMessageEntity),
       media,
-      richMessage: richMessage ? buildInputRichMessage(richMessage) : undefined,
+      richMessage: inputRichMessage,
       randomId,
       replyTo: requestReplyInfo && buildInputReplyTo(requestReplyInfo),
     }), {
@@ -1116,6 +1141,7 @@ function canSendRichMessage(params: SendMessageParams) {
     && !params.sticker
     && !params.story
     && !params.gif
+    && !params.audio
     && !params.poll
     && !params.todo
     && !params.contact
@@ -1903,6 +1929,9 @@ export async function searchMessagesInChat({
     case 'gif':
       filter = new GramJs.InputMessagesFilterGif();
       break;
+    case 'polls':
+      filter = new GramJs.InputMessagesFilterPoll();
+      break;
     case 'text':
     default: {
       filter = new GramJs.InputMessagesFilterEmpty();
@@ -2331,7 +2360,7 @@ export function forwardMessagesLocal(params: ForwardMessagesParams) {
 
 export async function forwardApiMessages(params: ForwardMessagesParams) {
   const {
-    fromChat, toChat, toThreadId, isSilent,
+    fromChat, toChat, toThreadId, messages, isSilent,
     scheduledAt, scheduleRepeatPeriod, sendAs, withMyScore, noAuthors, noCaptions,
     forwardedLocalMessagesSlice, messagePriceInStars, effectId,
   } = params;
@@ -2343,6 +2372,8 @@ export async function forwardApiMessages(params: ForwardMessagesParams) {
   } = forwardedLocalMessagesSlice;
 
   const priceInStars = messagePriceInStars ? messagePriceInStars * messageIds.length : undefined;
+  const isFromEphemeral = messages[0]?.isEphemeral;
+  const apiMessageIds = isFromEphemeral ? messageIds.map(getMtpEphemeralMessageId) : messageIds;
 
   const randomIds = messageIds.map(() => generateRandomBigInt());
   try {
@@ -2350,7 +2381,8 @@ export async function forwardApiMessages(params: ForwardMessagesParams) {
       fromPeer: buildInputPeer(fromChat.id, fromChat.accessHash),
       toPeer: buildInputPeer(toChat.id, toChat.accessHash),
       randomId: randomIds,
-      id: messageIds,
+      id: apiMessageIds,
+      fromEphemeral: isFromEphemeral || undefined,
       withMyScore: withMyScore || undefined,
       silent: isSilent || undefined,
       dropAuthor: noAuthors || undefined,

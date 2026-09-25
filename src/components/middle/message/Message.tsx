@@ -45,12 +45,12 @@ import type {
 } from '../../../types';
 import type { Signal } from '../../../util/signals';
 import { MAIN_THREAD_ID } from '../../../api/types';
-import { AudioOrigin } from '../../../types';
 
 import { EMOJI_STATUS_LOOP_LIMIT, MESSAGE_APPEARANCE_DELAY } from '../../../config';
 import {
   areReactionsEmpty,
   getAllowedAttachmentOptions,
+  getCanReplyToEphemeralMessage,
   getIsDownloading,
   getMainUsername,
   getMessageContent,
@@ -68,6 +68,7 @@ import {
   isChatPublic,
   isGeoLiveExpired,
   isMessageLocal,
+  isMessageLocalOnly,
   isMessageTranslatable,
   isOwnMessage,
   isReplyToMessage,
@@ -519,6 +520,8 @@ const Message = ({
     isTypingDraft, previousLocalId, fromRank,
   } = message;
 
+  const isLocalOnly = isMessageLocalOnly(message);
+
   const [isTranscriptionHidden, setIsTranscriptionHidden] = useState(false);
   const [isPlayingSnapAnimation, setIsPlayingSnapAnimation] = useState(false);
   const [isPlayingDeleteAnimation, setIsPlayingDeleteAnimation] = useState(false);
@@ -529,7 +532,7 @@ const Message = ({
   const [declineReason, setDeclineReason] = useState('');
   const { isMobile, isTouchScreen } = useAppLayout();
 
-  useOnIntersect(bottomMarkerRef, isTypingDraft || message.isEphemeral ? undefined : observeIntersectionForBottom);
+  useOnIntersect(bottomMarkerRef, isTypingDraft || isLocalOnly ? undefined : observeIntersectionForBottom);
 
   const {
     isContextMenuOpen,
@@ -589,7 +592,7 @@ const Message = ({
     && threadId === MAIN_THREAD_ID
     && !isQuickPreview
     && !isLocal
-    && !message.isEphemeral
+    && !isLocalOnly
     && readMetricsMessage.viewsCount !== undefined;
   const hasMessageReply = isReplyToMessage(message) && !shouldHideReply
     && (!isEphemeralReply || Boolean(replyMessage));
@@ -902,7 +905,7 @@ const Message = ({
     }
   }, [isShowingSummary, summary?.text]);
 
-  const currentTranslatedText = translatedText || previousTranslatedText;
+  const currentTranslatedText = shouldTranslate ? translatedText || previousTranslatedText : undefined;
 
   const phoneCall = action?.type === 'phoneCall' ? action : undefined;
 
@@ -1025,7 +1028,7 @@ const Message = ({
     || undefined;
 
   useEffect(() => {
-    if (isTypingDraft || message.isEphemeral) {
+    if (isTypingDraft || isLocalOnly) {
       return;
     }
 
@@ -1070,7 +1073,7 @@ const Message = ({
     isQuickPreview,
     isOwn,
     isTypingDraft,
-    message.isEphemeral,
+    isLocalOnly,
     markMessageListRead,
     messageId,
     memoFirstUnreadIdRef,
@@ -1116,6 +1119,7 @@ const Message = ({
           noAvatars={noAvatars}
           canAutoLoadMedia={canAutoLoadMedia}
           isProtected={isProtected}
+          noPlaylist={isScheduled}
           theme={theme}
           observeIntersectionForLoading={observeIntersectionForLoading}
           observeIntersectionForPlaying={observeIntersectionForPlaying}
@@ -1251,7 +1255,7 @@ const Message = ({
     );
     const shouldReadMedia = !hasTtl || !isOwn || isChatWithSelf;
     let ephemeralBotName: string | undefined;
-    if (message.isEphemeral && message.isOutgoing) {
+    if (isLocalOnly && message.isOutgoing) {
       if (!ephemeralBot) {
         ephemeralBotName = lang('Bot');
       } else if (ephemeralBot.hasUsername) {
@@ -1270,7 +1274,7 @@ const Message = ({
               <BadgeButton className="ephemeral-header">
                 <Icon name="eye-outline" />
                 <span dir="auto">
-                  {message.isOutgoing
+                  {message.isOutgoing && isLocalOnly
                     ? lang('EphemeralOnlyVisibleToBot', { bot: ephemeralBotName! })
                     : lang('EphemeralOnlyVisible')}
                 </span>
@@ -1409,7 +1413,9 @@ const Message = ({
           <Audio
             theme={theme}
             message={message}
-            origin={AudioOrigin.Inline}
+            variant="inline"
+            threadId={threadId}
+            noPlaylist={isScheduled}
             uploadProgress={uploadProgress}
             isSelectable={isInDocumentGroup}
             isSelected={isSelected}
@@ -1718,7 +1724,7 @@ const Message = ({
   });
 
   const handleLocalInlineButtonClick = useLastCallback((button: ApiKeyboardButton) => {
-    if (button.type === 'openThread') {
+    if (button.action.type === 'openThread') {
       openThread({
         chatId,
         threadId: messageTopic!.id,
@@ -1726,8 +1732,8 @@ const Message = ({
       return;
     }
 
-    if (button.type === 'suggestedMessage') {
-      if (button.buttonType === 'approve') {
+    if (button.action.type === 'suggestedMessage') {
+      if (button.action.buttonType === 'approve') {
         openSuggestedPostApprovalModal({
           chatId,
           messageId: message.id,
@@ -1735,7 +1741,7 @@ const Message = ({
         return;
       }
 
-      if (button.buttonType === 'decline') {
+      if (button.action.buttonType === 'decline') {
         openDeclineDialog();
         return;
       }
@@ -1743,7 +1749,7 @@ const Message = ({
       clickSuggestedMessageButton({
         chatId,
         messageId: message.id,
-        button,
+        button: { ...button, action: button.action },
       });
       return;
     }
@@ -1890,21 +1896,17 @@ const Message = ({
     return [
       [
         {
-          type: 'suggestedMessage',
-          buttonType: 'decline',
+          action: { type: 'suggestedMessage', buttonType: 'decline' },
           text: lang('SuggestedPostDecline'),
         },
         {
-          type: 'suggestedMessage',
-          buttonType: 'approve',
+          action: { type: 'suggestedMessage', buttonType: 'approve', disabled: isSuggestedPostExpired },
           text: lang('SuggestedPostApprove'),
-          disabled: isSuggestedPostExpired,
         },
       ],
       [
         {
-          type: 'suggestedMessage',
-          buttonType: 'suggestChanges',
+          action: { type: 'suggestedMessage', buttonType: 'suggestChanges' },
           text: lang('SuggestedPostSuggestChanges'),
         },
       ],
@@ -1918,7 +1920,7 @@ const Message = ({
 
     return [
       [{
-        type: 'openThread',
+        action: { type: 'openThread' },
         text: lang('BotForumContinueThreadButton'),
       }],
     ];
@@ -2054,6 +2056,7 @@ const Message = ({
         {message.inlineButtons && (
           <InlineButtons
             inlineButtons={message.inlineButtons}
+            isReceipt={Boolean(invoice?.receiptMessageId)}
             isEphemeral={message.isEphemeral}
             onClick={handleInlineButtonClick}
           />
@@ -2285,7 +2288,8 @@ export default memo(withGlobal<OwnProps>(
     const isMediaNsfw = selectIsMediaNsfw(global, message);
     const isReplyMediaNsfw = replyMessage && selectIsMediaNsfw(global, replyMessage);
 
-    const summary = selectMessageSummary(global, chatId, message.id, requestedTranslationLanguage);
+    const summary = !message.isEphemeral
+      ? selectMessageSummary(global, chatId, message.id, requestedTranslationLanguage) : undefined;
 
     const allowedAttachmentOptions = getAllowedAttachmentOptions(chat, chatFullInfo, isChatWithBot);
 
@@ -2320,7 +2324,7 @@ export default memo(withGlobal<OwnProps>(
       isAnonymousForwards,
       isChannel,
       isGroup,
-      canReply: message.isEphemeral ? !message.isOutgoing : canReply,
+      canReply: message.isEphemeral ? getCanReplyToEphemeralMessage(message) : canReply,
       highlight,
       animatedEmoji,
       animatedCustomEmoji,

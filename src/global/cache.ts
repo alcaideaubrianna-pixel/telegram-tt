@@ -4,6 +4,7 @@ import { addCallback, removeCallback } from '../lib/teact/teactn';
 import type {
   ApiAvailableReaction,
   ApiDocument,
+  ApiKeyboardButton,
   ApiMessage,
   ApiPhoto,
   ApiVideo,
@@ -24,6 +25,7 @@ import {
   GLOBAL_STATE_CACHE_CHAT_LIST_LIMIT,
   GLOBAL_STATE_CACHE_CUSTOM_EMOJI_LIMIT,
   GLOBAL_STATE_CACHE_DISABLED,
+  GLOBAL_STATE_CACHE_PREFIX,
   GLOBAL_STATE_CACHE_USER_LIST_LIMIT,
   INSTANT_VIEW_FONT_SIZE_ADJUST_DEFAULT,
   IS_SCREEN_LOCKED_CACHE_KEY,
@@ -36,21 +38,22 @@ import { getOrderedIds } from '../util/folderManager';
 import {
   compact, pick, pickTruthy, unique,
 } from '../util/iteratees';
-import { GLOBAL_STATE_CACHE_KEY } from '../util/multiaccount';
-import { encryptSession } from '../util/passcode';
+import { ACCOUNT_SLOT, getGlobalStateCacheKey, GLOBAL_STATE_CACHE_KEY } from '../util/multiaccount';
+import { getDek, writeGlobalsVaultForSlot } from '../util/passcode';
 import { onBeforeUnload, throttle } from '../util/schedulers';
 import { getServerTime } from '../util/serverTime';
 import { hasStoredSession } from '../util/sessions';
 import { getSystemTheme } from '../util/systemTheme';
 import { getDefaultPatternColor } from '../util/wallpaper';
 import { migrateLegacyWallpaperBlobs, prefetchWallpaperUrl } from '../util/wallpaperStorage';
+import { buildPageAudioById } from './helpers/buildPageAudioById';
 import { selectSharedSettings } from './selectors/sharedState';
 import { selectThreadInfo } from './selectors/threads';
 import { addActionHandler, getGlobal } from './index';
 import {
   INITIAL_GLOBAL_STATE, SHARED_STATE_CACHE_VERSION,
 } from './initialState';
-import { clearGlobalForLockScreen, clearSharedStateForLockScreen } from './reducers';
+import { clearGlobalForLockScreen, updatePasscodeSettings } from './reducers';
 import {
   selectChatLastMessageId,
   selectChatMessages,
@@ -79,7 +82,11 @@ let cacheUpdateSuspensionTimestamp = 0;
 let unsubscribeFromBeforeUnload: NoneToVoidFunction | undefined;
 
 export function cacheGlobal(global: GlobalState) {
-  return MAIN_IDB_STORE.set(GLOBAL_STATE_CACHE_KEY, global);
+  return cacheGlobalForSlot(ACCOUNT_SLOT, global);
+}
+
+export function cacheGlobalForSlot(slot: number | undefined, global: GlobalState) {
+  return MAIN_IDB_STORE.set(getGlobalStateCacheKey(slot), reduceGlobal(global));
 }
 
 export function cacheSharedState(state: SharedState) {
@@ -87,7 +94,11 @@ export function cacheSharedState(state: SharedState) {
 }
 
 export function loadCachedGlobal() {
-  return MAIN_IDB_STORE.get<GlobalState>(GLOBAL_STATE_CACHE_KEY);
+  return loadCachedGlobalForSlot(ACCOUNT_SLOT);
+}
+
+export function loadCachedGlobalForSlot(slot: number | undefined) {
+  return MAIN_IDB_STORE.get<GlobalState>(getGlobalStateCacheKey(slot));
 }
 
 export function loadCachedSharedState() {
@@ -98,12 +109,20 @@ export function removeGlobalFromCache() {
   return MAIN_IDB_STORE.del(GLOBAL_STATE_CACHE_KEY);
 }
 
-export function removeSharedStateFromCache() {
-  return MAIN_IDB_STORE.del(SHARED_STATE_CACHE_KEY);
+export async function removeAllGlobalCaches() {
+  Object.keys(localStorage).filter(isGlobalStateCacheKey).forEach((cacheKey) => localStorage.removeItem(cacheKey));
+  const cacheKeys = (await MAIN_IDB_STORE.keys()).filter(
+    (cacheKey): cacheKey is string => typeof cacheKey === 'string' && isGlobalStateCacheKey(cacheKey),
+  );
+  await MAIN_IDB_STORE.delMany(cacheKeys);
 }
 
-function cacheIsScreenLocked(global: GlobalState) {
-  if (global?.passcode?.isScreenLocked) localStorage.setItem(IS_SCREEN_LOCKED_CACHE_KEY, 'true');
+function isGlobalStateCacheKey(cacheKey: string) {
+  return cacheKey === GLOBAL_STATE_CACHE_PREFIX || cacheKey.startsWith(`${GLOBAL_STATE_CACHE_PREFIX}_`);
+}
+
+export function removeSharedStateFromCache() {
+  return MAIN_IDB_STORE.del(SHARED_STATE_CACHE_KEY);
 }
 
 export function initCache() {
@@ -113,7 +132,6 @@ export function initCache() {
 
   const resetCache = () => {
     isRemovingCache = true;
-    localStorage.removeItem(IS_SCREEN_LOCKED_CACHE_KEY);
     removeGlobalFromCache().finally(() => {
       isRemovingCache = false;
       if (!isCaching) {
@@ -144,7 +162,6 @@ export async function loadCache(initialState: GlobalState): Promise<GlobalState 
   const cache = await readCache(initialState);
 
   if (cache.passcode.hasPasscode || hasStoredSession()) {
-    setupCaching();
     // Start resolving the wallpaper early without delaying the initial render
     void prefetchCurrentWallpaperUrl(cache);
 
@@ -157,6 +174,8 @@ export async function loadCache(initialState: GlobalState): Promise<GlobalState 
 }
 
 export function setupCaching() {
+  if (isCaching) return;
+
   isCaching = true;
   unsubscribeFromBeforeUnload = onBeforeUnload(updateCacheForced, true);
   window.addEventListener('blur', updateCacheForced);
@@ -280,7 +299,7 @@ function pruneExpiredEphemeralMessages(cached: GlobalState) {
   const serverTime = getServerTime();
   Object.values(cached.messages.byChatId).forEach(({ ephemeralById }) => {
     Object.values(ephemeralById).forEach((message) => {
-      if (message.date + EPHEMERAL_MESSAGE_TTL_SECONDS <= serverTime) {
+      if (message.anchorMsgId || message.date + EPHEMERAL_MESSAGE_TTL_SECONDS <= serverTime) {
         delete ephemeralById[message.id];
       }
     });
@@ -291,6 +310,13 @@ function unsafeMigrateCache(cached: GlobalState, initialState: GlobalState) {
   const untypedCached = cached as any;
   Object.values(cached.messages.byChatId).forEach((messageStore) => {
     messageStore.ephemeralById ||= {};
+    messageStore.anchoredById = {};
+  });
+
+  Object.values(cached.messages.webPageById).forEach((webPage) => {
+    if (webPage.webpageType === 'full' && webPage.cachedPage && !webPage.cachedPageAudioById) {
+      webPage.cachedPageAudioById = buildPageAudioById(webPage.cachedPage);
+    }
   });
 
   // Pre-fill settings with defaults
@@ -388,6 +414,11 @@ function unsafeMigrateCache(cached: GlobalState, initialState: GlobalState) {
     cached.cacheVersion = 6;
   }
 
+  if (cached.cacheVersion < 7) {
+    migrateButtonActions(cached);
+    cached.cacheVersion = 7;
+  }
+
   if (!cached.auth) {
     cached.auth = initialState.auth;
     cached.auth.rememberMe = untypedCached.authRememberMe;
@@ -399,6 +430,14 @@ function unsafeMigrateCache(cached: GlobalState, initialState: GlobalState) {
 
   if (cached.audioPlayer.volume === undefined) {
     cached.audioPlayer.volume = initialState.audioPlayer.volume;
+  }
+
+  if (cached.audioPlayer.repeatMode === undefined) {
+    cached.audioPlayer.repeatMode = initialState.audioPlayer.repeatMode;
+  }
+
+  if (cached.audioPlayer.orderMode === undefined) {
+    cached.audioPlayer.orderMode = initialState.audioPlayer.orderMode;
   }
 }
 
@@ -433,28 +472,35 @@ export function temporarilySuspendCacheUpdate() {
   cacheUpdateSuspensionTimestamp = Date.now() + UPDATE_THROTTLE;
 }
 
-export function forceUpdateCache(noEncrypt = false) {
+export function forceUpdateCache() {
   if (Date.now() < cacheUpdateSuspensionTimestamp) {
     return;
   }
 
   const global = getGlobal();
-  const { hasPasscode, isScreenLocked } = global.passcode;
+  const passcodeState = localStorage.getItem(IS_SCREEN_LOCKED_CACHE_KEY);
+  if (passcodeState === 'enabling' || passcodeState === 'disabling') return;
+  const hasPasscode = passcodeState === 'true' || passcodeState === 'false';
+  if (!hasPasscode && global.passcode.hasPasscode) return;
 
+  // With passcode enabled, content is never persisted in plaintext.
+  // Full snapshots are written into the encrypted vault instead.
   if (hasPasscode) {
-    if (!isScreenLocked && !noEncrypt) {
-      const serializedGlobal = serializeGlobal(global);
-      void encryptSession(undefined, serializedGlobal, serializeShared(global.sharedState));
-    }
+    const passcodeGlobal = global.passcode.hasPasscode ? global : updatePasscodeSettings(global, {
+      hasPasscode: true,
+    });
+    cacheGlobal(clearGlobalForLockScreen(passcodeGlobal, false));
+    cacheSharedState(reduceSharedState(global.sharedState));
 
-    cacheIsScreenLocked(global);
-    cacheGlobal(clearGlobalForLockScreen(global, false));
-    cacheSharedState(clearSharedStateForLockScreen(global.sharedState));
+    // Keep the vault snapshot fresh so content survives a boot-lock
+    // (e.g. all tabs reloading at once), when there is no explicit lock to write it
+    if (getDek() && !global.passcode.isScreenLocked) {
+      void writeGlobalsVaultForSlot(ACCOUNT_SLOT, serializeGlobal(global));
+    }
     return;
   }
 
-  cacheIsScreenLocked(global);
-  cacheGlobal(reduceGlobal(global));
+  cacheGlobal(global);
   cacheSharedState(reduceSharedState(global.sharedState));
 }
 
@@ -510,6 +556,8 @@ function reduceGlobal<T extends GlobalState>(global: T) {
     passcode: pick(global.passcode, [
       'isScreenLocked',
       'hasPasscode',
+      'hasPasskey',
+      'autolockDuration',
       'invalidAttemptsCount',
       'timeoutUntil',
     ]),
@@ -805,6 +853,7 @@ function reduceMessages<T extends GlobalState>(global: T): GlobalState['messages
     const ephemeralById = Object.values(current.ephemeralById).reduce((acc, message) => {
       if (
         message.sendingState
+        || message.anchorMsgId
         || message.date + EPHEMERAL_MESSAGE_TTL_SECONDS <= serverTime
       ) {
         return acc;
@@ -822,6 +871,7 @@ function reduceMessages<T extends GlobalState>(global: T): GlobalState['messages
     byChatId[chatId] = {
       byId: cleanedById,
       ephemeralById,
+      anchoredById: {},
       threadsById,
       summaryById: {},
     };
@@ -923,7 +973,32 @@ function reduceGroupCalls<T extends GlobalState>(global: T): GlobalState['groupC
   };
 }
 
-function reduceAvailableReactions(availableReactions?: ApiAvailableReaction[]): ApiAvailableReaction[] | undefined {
+function reduceAvailableReactions(
+  availableReactions?: ApiAvailableReaction[],
+): ApiAvailableReaction[] | undefined {
   return availableReactions
     ?.map((r) => ({ ...pick(r, ['reaction', 'staticIcon', 'title', 'isInactive']), isLocalCache: true }));
+}
+
+function migrateButtonActions(cached: GlobalState) {
+  Object.values(cached.messages.byChatId).forEach(({ byId, ephemeralById }) => {
+    [...Object.values(byId), ...Object.values(ephemeralById)].forEach((message) => {
+      [message.inlineButtons, message.keyboardButtons].forEach((rows) => {
+        rows?.forEach((row) => row.forEach((button, index) => {
+          if ('action' in button) return;
+          const legacyButton = button as { type: string; text?: string; receiptMessageId?: number };
+          const { text, type, receiptMessageId, ...fields } = legacyButton;
+          if (type === 'receipt' && message.content.invoice) {
+            message.content.invoice.receiptMessageId ||= receiptMessageId;
+          }
+          const { style, ...actionFields } = fields as { style?: ApiKeyboardButton['style'] };
+          row[index] = {
+            text: text || '',
+            style,
+            action: { ...actionFields, type: type === 'receipt' ? 'buy' : type } as ApiKeyboardButton['action'],
+          };
+        }));
+      });
+    });
+  });
 }

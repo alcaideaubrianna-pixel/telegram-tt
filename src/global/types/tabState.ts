@@ -64,12 +64,12 @@ import type {
   ApiUser,
   ApiVideo,
 } from '../../api/types';
+import type { ParsedCheckList } from '../../components/middle/composer/helpers/parseCheckList';
 import type { FoldersActions } from '../../hooks/reducers/useFoldersReducer';
 import type { ReducerAction } from '../../hooks/useReducer';
 import type {
   ActiveDownloads,
   ActiveEmojiInteraction,
-  AudioOrigin,
   ChatCreationProgress,
   ChatMediaSearchParams,
   ChatRequestedTranslations,
@@ -90,6 +90,8 @@ import type {
   MiddleSearchParams,
   NewChatMembersProgress,
   PaymentStep,
+  PlaybackItemRef,
+  PlaybackSource,
   ProfileEditProgress,
   ProfileTabType,
   ResaleGiftsFilterOptions,
@@ -97,6 +99,7 @@ import type {
   SettingsScreens,
   SharedMediaType,
   ShippingOption,
+  ShuffleState,
   StarGiftInfo,
   StoryViewerOrigin,
   TabThread,
@@ -355,7 +358,7 @@ export type TabState = {
     byChatId: Record<string, ManagementState>;
   };
 
-  isPaymentMessageConfirmDialogOpen: boolean;
+  paymentMessageConfirmDialogKey?: string;
 
   storyViewer: {
     isRibbonShown?: boolean;
@@ -411,15 +414,20 @@ export type TabState = {
   };
 
   audioPlayer: {
-    chatId?: string;
-    messageId?: number;
-    threadId?: ThreadId;
-    origin?: AudioOrigin;
+    activeItem?: PlaybackItemRef;
+    source?: PlaybackSource;
     playbackRate: number;
     isPlaybackRateActive?: boolean;
     timestamp?: number;
     isMuted: boolean;
+    shuffle?: ShuffleState;
+    pendingStep?: {
+      direction: 'next' | 'prev';
+      isAuto?: boolean;
+    };
   };
+
+  isAudioPlaylistModalOpen?: boolean;
 
   webPagePreviewId?: string;
 
@@ -443,6 +451,8 @@ export type TabState = {
     fromChatId?: string;
     messageIds?: number[];
     storyId?: number;
+    audioItem?: PlaybackItemRef;
+    audioPendingSend?: { toChatId: string; toThreadId?: ThreadId; stars: number };
     toChatId?: string;
     toThreadId?: ThreadId;
     withMyScore?: boolean;
@@ -592,6 +602,7 @@ export type TabState = {
     chatId: string;
     messageId?: number;
     forNewTask?: boolean;
+    initialCheckList?: ParsedCheckList;
   };
 
   preparedMessageModal?: {

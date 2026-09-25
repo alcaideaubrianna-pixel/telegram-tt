@@ -1,5 +1,7 @@
 import type { ElementRef, TeactNode } from '../../lib/teact/teact';
-import { memo, useCallback, useRef } from '../../lib/teact/teact';
+import {
+  memo, useCallback, useMemo, useRef,
+} from '../../lib/teact/teact';
 import { getActions } from '../../global';
 
 import type {
@@ -27,9 +29,13 @@ import type {
 } from '../../api/types';
 import type { ObserveFn } from '../../hooks/useIntersectionObserver';
 import type { LangFn } from '../../util/localization';
-import { MediaViewerOrigin, type ThemeKey, type ThreadId } from '../../types';
+import { MAIN_THREAD_ID } from '../../api/types';
+import {
+  MediaViewerOrigin, type PlaybackItemRef, type PlaybackSource, type ThemeKey, type ThreadId,
+} from '../../types';
 
 import { DEBUG, TME_LINK_PREFIX } from '../../config';
+import { getPageBlocksAudios } from '../../global/helpers/buildPageAudioById';
 import { getRichTextPlainText, hasRichText } from '../../global/helpers/richMessage';
 import { IS_MAC_OS, IS_TOUCH_ENV } from '../../util/browser/windowEnvironment';
 import buildClassName from '../../util/buildClassName';
@@ -51,6 +57,7 @@ import useUniqueId from '../../hooks/useUniqueId';
 import CodeBlock from '../common/code/CodeBlock';
 import CompactMapPreview from '../common/CompactMapPreview';
 import CompactMediaPreview from '../common/CompactMediaPreview';
+import PlayableAudio from '../common/PlayableAudio';
 import Blockquote from '../common/quote/Blockquote';
 import Pullquote from '../common/quote/Pullquote';
 import SafeLink from '../common/SafeLink';
@@ -62,6 +69,7 @@ import Collage from './Collage';
 import EmbedFrame from './EmbedFrame';
 import EmbedPost from './EmbedPost';
 import Latex from './Latex';
+import RichButton from './RichButton';
 import RichText, { getPageAnchorId } from './RichText';
 import Slideshow from './Slideshow';
 import Checkbox from '@gili/primitives/Checkbox';
@@ -77,9 +85,11 @@ type OwnProps = {
   noAvatars?: boolean;
   canAutoLoadMedia?: boolean;
   isProtected?: boolean;
+  noPlaylist?: boolean;
   theme: ThemeKey;
   fontSizeAdjust?: number;
   pageUrl?: string;
+  webPageId?: string;
   chatId?: string;
   messageId?: number;
   threadId?: ThreadId;
@@ -104,6 +114,7 @@ type RichTextContext = {
 };
 
 const RELATED_ARTICLE_PHOTO_SIZE = 48;
+const SINGLE_SOURCE: PlaybackSource = { type: 'single' };
 const MAP_FALLBACK_WIDTH = 480;
 const MAP_FALLBACK_HEIGHT = 360;
 
@@ -114,9 +125,11 @@ const RichContent = ({
   noAvatars,
   canAutoLoadMedia,
   isProtected,
+  noPlaylist,
   theme,
   fontSizeAdjust,
   pageUrl,
+  webPageId,
   chatId,
   messageId,
   threadId,
@@ -136,6 +149,29 @@ const RichContent = ({
   const embedTitle = lang('PageContentEmbed');
   const style = fontSizeAdjust !== undefined ? `--iv-font-size-scale: ${fontSizeAdjust}` : undefined;
   const isMessageContent = messageId !== undefined;
+
+  const richMessageSource = useMemo<PlaybackSource | undefined>(() => (
+    chatId !== undefined && messageId !== undefined && !noPlaylist
+      ? {
+        type: 'richMessage', chatId, threadId: threadId ?? MAIN_THREAD_ID, messageId,
+      }
+      : undefined
+  ), [chatId, messageId, threadId, noPlaylist]);
+
+  const audioItemsById = useMemo(() => {
+    const itemsById = new Map<string, PlaybackItemRef>();
+    getPageBlocksAudios(blocks).forEach(({ id: documentId }) => {
+      if (chatId !== undefined && messageId !== undefined) {
+        itemsById.set(documentId, {
+          type: 'message', chatId, threadId: threadId ?? MAIN_THREAD_ID, messageId, documentId,
+        });
+      } else if (webPageId) {
+        itemsById.set(documentId, { type: 'instantView', webPageId, documentId });
+      }
+    });
+
+    return itemsById;
+  }, [blocks, chatId, messageId, threadId, webPageId]);
 
   const richTextContext: RichTextContext = {
     unsupportedText,
@@ -219,6 +255,22 @@ const RichContent = ({
 
   function renderBlock(block: ApiPageBlock, sourceKey: string, shouldBreakoutMedia = false): TeactNode {
     switch (block.type) {
+      case 'buttonRow':
+        return (
+          <div
+            className={buildClassName(
+              styles.buttonRow,
+              block.align === 'left' && styles.buttonsLeft,
+              block.align === 'center' && styles.buttonsCenter,
+              block.align === 'right' && styles.buttonsRight,
+            )}
+            data-rich-button-row={block.align || ''}
+          >
+            {block.buttons.map((button) => (
+              <RichButton button={button} {...richTextContext} />
+            ))}
+          </div>
+        );
       case 'title':
         return renderTextBlock(block.text, styles.title, renderContext, block.type);
       case 'subtitle':
@@ -258,7 +310,7 @@ const RichContent = ({
       case 'heading6':
         return renderTextBlock(block.text, styles.heading4, renderContext, block.type);
       case 'paragraph':
-        return renderTextBlock(block.text, styles.paragraph, renderContext);
+        return renderTextBlock(block.text, styles.paragraph, renderContext, block.type);
       case 'footer':
         return renderTextBlock(block.text, styles.footer, renderContext, block.type);
       case 'preformatted':
@@ -362,7 +414,25 @@ const RichContent = ({
             renderBlock={renderBlock}
           />
         );
-      case 'audio':
+      case 'audio': {
+        const item = audioItemsById.get(block.audio.id);
+        if (!item) return renderUnsupportedBlock(unsupportedText, block.type);
+        return (
+          <figure className={styles.figure}>
+            <div data-rich-copy-ignore>
+              <PlayableAudio
+                audio={block.audio}
+                item={item}
+                source={richMessageSource || SINGLE_SOURCE}
+                variant="inline"
+                isOwn={isOwn}
+                canDownload={!isProtected}
+              />
+            </div>
+            {renderCaption(block.caption, renderContext)}
+          </figure>
+        );
+      }
       case 'unsupported':
         return renderUnsupportedBlock(unsupportedText, block.type);
     }
@@ -698,7 +768,7 @@ function renderTextBlock(
   context: RenderBlockContext,
   blockType?: ApiPageBlock['type'] | 'tableTitle',
 ) {
-  if (!hasRichText(text)) {
+  if (blockType !== 'paragraph' && !hasRichText(text)) {
     return undefined;
   }
 

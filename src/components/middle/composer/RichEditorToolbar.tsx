@@ -15,6 +15,7 @@ import {
   MATH_BLOCK_NODE_NAME,
   MATH_INLINE_NODE_NAME,
 } from '../../../util/tiptap/constants';
+import { BUTTON_ROW_NODE_NAME, EMPTY_BUTTON_ROW } from '../../../util/tiptap/extensions/richButton';
 import {
   checkCanInsertRichEditorList,
   getCurrentRichEditorList,
@@ -50,6 +51,7 @@ type RichEditorToolbarAvailability = {
   canTogglePullquote: boolean;
   canSetDetails: boolean;
   canSetHorizontalRule: boolean;
+  canInsertButtonRow: boolean;
   canInsertBulletList: boolean;
   canInsertOrderedList: boolean;
   currentList?: RichEditorListState;
@@ -111,6 +113,7 @@ const EMPTY_TOOLBAR_AVAILABILITY: RichEditorToolbarAvailability = {
   canTogglePullquote: false,
   canSetDetails: false,
   canSetHorizontalRule: false,
+  canInsertButtonRow: false,
   canInsertBulletList: false,
   canInsertOrderedList: false,
   currentList: undefined,
@@ -213,6 +216,11 @@ const RichEditorToolbar = ({ editor, isEnabled }: OwnProps) => {
     }
 
     editor.chain().focus().setHorizontalRule().run();
+  });
+
+  const handleInsertButtonRow = useLastCallback(() => {
+    if (!editor || !availability.canInsertButtonRow) return;
+    editor.chain().focus().insertContent(EMPTY_BUTTON_ROW).run();
   });
 
   const handleInsertList = useLastCallback((type: RichListType, isChecklist?: boolean) => {
@@ -326,7 +334,8 @@ const RichEditorToolbar = ({ editor, isEnabled }: OwnProps) => {
     || availability.canSetBlockquote
     || availability.canTogglePullquote
     || availability.canSetDetails
-    || availability.canSetHorizontalRule;
+    || availability.canSetHorizontalRule
+    || availability.canInsertButtonRow;
   const currentList = availability.currentList;
   const canOpenListMenu = availability.canInsertBulletList
     || availability.canInsertOrderedList
@@ -410,6 +419,14 @@ const RichEditorToolbar = ({ editor, isEnabled }: OwnProps) => {
           >
             {lang('RichEditorDivider')}
           </MenuItem>
+          <MenuItem
+            icon="button"
+            hasIconPremiumBadge
+            disabled={!availability.canInsertButtonRow}
+            onClick={handleInsertButtonRow}
+          >
+            {lang('RichButtonRow')}
+          </MenuItem>
         </DropdownMenu>
         <DropdownMenu
           className="rich-editor-toolbar-menu"
@@ -481,7 +498,7 @@ const RichEditorToolbar = ({ editor, isEnabled }: OwnProps) => {
                   {lang('RichEditorListNumberingType')}
                 </NestedMenuItem>
                 <MenuItem
-                  icon={currentList?.isReversed ? 'check' : 'sort'}
+                  icon={currentList?.isReversed ? 'check' : 'hamburger'}
                   disabled={currentList?.type !== 'orderedList'}
                   onClick={handleToggleCurrentOrderedListReversed}
                 >
@@ -567,6 +584,8 @@ function buildToolbarAvailability(editor: Editor): RichEditorToolbarAvailability
     canTogglePullquote: canUseBlockOptions && commandChecks.togglePullquote(),
     canSetDetails: canSetDetails && commandChecks.setDetails(),
     canSetHorizontalRule: canInsertDivider && commandChecks.setHorizontalRule(),
+    canInsertButtonRow: canUseBlockOptions && checkCanInsertBlockAtSelection(editor, BUTTON_ROW_NODE_NAME)
+      && commandChecks.insertContent(EMPTY_BUTTON_ROW),
     canInsertBulletList,
     canInsertOrderedList: canUseBlockOptions && checkCanInsertRichEditorList(editor, 'orderedList'),
     currentList: getCurrentRichEditorList(editor),

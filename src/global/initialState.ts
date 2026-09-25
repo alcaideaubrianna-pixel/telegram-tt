@@ -113,12 +113,13 @@ export const INITIAL_SHARED_STATE: SharedState = {
     canDisplayChatInTitle: true,
     shouldAllowHttpTransport: true,
     shouldWarnAboutFiles: true,
+    shouldKeepLockScreenBackground: true,
   },
   isInitial: true,
 };
 
 export const INITIAL_GLOBAL_STATE: GlobalState = {
-  cacheVersion: 6,
+  cacheVersion: 7,
   isInited: true,
   attachMenu: { bots: {} },
   passcode: {},
@@ -130,6 +131,8 @@ export const INITIAL_GLOBAL_STATE: GlobalState = {
   audioPlayer: {
     volume: DEFAULT_VOLUME,
     lastPlaybackRate: DEFAULT_PLAYBACK_RATE,
+    repeatMode: 'none',
+    orderMode: 'default',
   },
 
   mediaViewer: {
@@ -461,6 +464,4 @@ export const INITIAL_TAB_STATE: TabState = {
   requestedTranslations: {
     byChatId: {},
   },
-
-  isPaymentMessageConfirmDialogOpen: false,
 };

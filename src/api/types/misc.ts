@@ -23,6 +23,7 @@ export interface ApiInitialArgs {
   isWebmSupported?: boolean;
   maxBufferSize?: number;
   webAuthToken?: string;
+  webAuthUserId?: string;
   dcId?: number;
   mockScenario?: string;
   shouldAllowHttpTransport?: boolean;
@@ -77,7 +78,7 @@ export interface ApiAttachment {
   shouldSendAsFile?: true;
   shouldSendAsSpoiler?: true;
 
-  uniqueId?: string;
+  uniqueId: string;
   ttlSeconds?: number;
   isRoundVideo?: boolean;
   shouldSendInHighQuality?: boolean;

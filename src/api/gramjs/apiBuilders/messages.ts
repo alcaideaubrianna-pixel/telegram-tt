@@ -2,6 +2,7 @@ import { Api as GramJs } from '../../../lib/gramjs';
 
 import type {
   ApiAttachment,
+  ApiAudio,
   ApiBaseThreadInfo,
   ApiChat,
   ApiCommentsInfo,
@@ -159,29 +160,34 @@ export function buildApiMessage(mtpMessage: GramJs.TypeMessage): ApiMessage | un
 }
 
 export function buildApiEphemeralMessage(mtpMessage: GramJs.EphemeralMessage): ApiMessage {
-  const chatId = getApiChatIdFromMtpPeer(mtpMessage.peerId);
   const fromId = getApiChatIdFromMtpPeer(mtpMessage.fromId);
   const receiverId = buildApiPeerId(mtpMessage.receiverId, 'user');
+  const peerId = mtpMessage.peerId || (mtpMessage.out ? buildPeer(receiverId) : mtpMessage.fromId);
+  const chatId = getApiChatIdFromMtpPeer(peerId);
   const message = buildApiMessageWithChatId(chatId, {
     id: getEphemeralMessageId(mtpMessage.id),
     date: mtpMessage.date,
-    peerId: mtpMessage.peerId,
+    peerId,
     fromId: mtpMessage.fromId,
     out: mtpMessage.out,
     message: mtpMessage.message,
     entities: mtpMessage.entities,
     media: mtpMessage.media,
+    richMessage: mtpMessage.richMessage,
     replyMarkup: mtpMessage.replyMarkup,
     replyTo: mtpMessage.replyTo,
+    invertMedia: mtpMessage.invertMedia,
+    noforwards: mtpMessage.noforwards,
   });
 
   return {
     ...message,
     content: message.content.pollId ? {} : message.content,
     ephemeralBotId: mtpMessage.out ? receiverId : fromId,
+    ephemeralReceiverId: receiverId,
+    anchorMsgId: mtpMessage.anchorMsgId,
     ephemeralTopMsgId: mtpMessage.topMsgId,
     isEphemeral: true,
-    isForwardingAllowed: false,
   };
 }
 
@@ -257,10 +263,7 @@ export function buildApiMessageWithChatId(
   const isEdited = Boolean(mtpMessage.editDate) && !mtpMessage.editHide;
   const {
     inlineButtons, keyboardButtons, keyboardPlaceholder, isKeyboardSingleUse, isKeyboardSelective,
-  } = buildReplyButtons(
-    mtpMessage.replyMarkup,
-    mtpMessage.media instanceof GramJs.MessageMediaInvoice ? mtpMessage.media.receiptMsgId : undefined,
-  ) || {};
+  } = buildReplyButtons(mtpMessage.replyMarkup) || {};
   const { mediaUnread: isMediaUnread, postAuthor } = mtpMessage;
   const groupedId = mtpMessage.groupedId !== undefined ? String(mtpMessage.groupedId) : undefined;
   const isInAlbum = Boolean(groupedId) && !(content.document || content.audio || content.sticker);
@@ -384,7 +387,10 @@ function buildApiSuggestedPost(suggestedPost: GramJs.SuggestedPost): ApiSuggeste
   };
 }
 
-function buildApiMessageForwardInfo(fwdFrom: GramJs.MessageFwdHeader, isChatWithSelf = false): ApiMessageForwardInfo {
+function buildApiMessageForwardInfo(
+  fwdFrom: GramJs.MessageFwdHeader,
+  isChatWithSelf = false,
+): ApiMessageForwardInfo {
   const savedFromPeerId = fwdFrom.savedFromPeer && getApiChatIdFromMtpPeer(fwdFrom.savedFromPeer);
   const fromId = fwdFrom.fromId && getApiChatIdFromMtpPeer(fwdFrom.fromId);
 
@@ -511,6 +517,7 @@ export function buildLocalMessage({
   attachment,
   sticker,
   gif,
+  audio,
   poll,
   todo,
   contact,
@@ -535,6 +542,7 @@ export function buildLocalMessage({
   attachment?: ApiAttachment;
   sticker?: ApiSticker;
   gif?: ApiVideo;
+  audio?: ApiAudio;
   poll?: ApiNewPoll;
   todo?: ApiNewMediaTodo;
   contact?: ApiContact;
@@ -577,6 +585,7 @@ export function buildLocalMessage({
       ...media,
       sticker,
       video: gif || media?.video,
+      audio: audio || media?.audio,
       contact,
       storyData: story && { mediaType: 'storyData', ...story },
       pollId: localPoll?.summary.id,

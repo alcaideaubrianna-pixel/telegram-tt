@@ -88,6 +88,7 @@ import {
   selectChatFullInfo,
   selectChatHistoryTtl,
   selectChatMessage,
+  selectChatMessageOrEphemeral,
   selectChatType,
   selectCurrentMessageList,
   selectCustomEmoji,
@@ -148,6 +149,7 @@ import buildAttachment, {
   buildGifAttachment,
   prepareAttachmentsToSend,
 } from '../middle/composer/helpers/buildAttachment';
+import { parseCheckList } from '../middle/composer/helpers/parseCheckList';
 import { armSendCollapseReserve } from '../middle/helpers/messageListReserves';
 import {
   buildRichMessageFromFormatted,
@@ -329,7 +331,7 @@ type StateProps = {
   richMessageMaxTableColumns: number;
   shouldPaidMessageAutoApprove?: boolean;
   isSilentPosting?: boolean;
-  isPaymentMessageConfirmDialogOpen: boolean;
+  paymentMessageConfirmDialogKey?: string;
   starsBalance: number;
   isStarsBalanceModalOpen: boolean;
   disallowedGifts?: ApiDisallowedGifts;
@@ -348,6 +350,11 @@ enum MainButtonState {
   Forward = 'forward',
   SendOneTime = 'sendOneTime',
 }
+
+type ConvertedCheckListSource = {
+  chatId: string;
+  threadId: ThreadId;
+};
 
 type ScheduledMessageArgs = TabState['contentToBeScheduled'] | {
   id: string; queryId: string; isSilent?: boolean;
@@ -464,7 +471,7 @@ const Composer = ({
   richMessageMaxMedia,
   richMessageMaxTableColumns,
   isSilentPosting,
-  isPaymentMessageConfirmDialogOpen,
+  paymentMessageConfirmDialogKey,
   starsBalance,
   isStarsBalanceModalOpen,
   disallowedGifts,
@@ -745,6 +752,7 @@ const Composer = ({
     if (!isForwarding || !forwardedMessagesCount) return messagesInInput || 1;
     return forwardedMessagesCount + messagesInInput;
   }, [hasInputContent, hasAttachments, attachments, isForwarding, forwardedMessagesCount]);
+  const paymentDialogKey = `composer-${type}-${messageListType}-${chatId}-${threadId}-${storyId}`;
   const starsForAllMessages = paidMessagesStars ? messagesCount * paidMessagesStars : 0;
 
   const {
@@ -753,7 +761,7 @@ const Composer = ({
     shouldAutoApprove: shouldPaidMessageAutoApprove,
     setAutoApprove: setShouldPaidMessageAutoApprove,
     handleWithConfirmation: handleActionWithPaymentConfirmation,
-  } = usePaidMessageConfirmation(starsForAllMessages, isStarsBalanceModalOpen, starsBalance);
+  } = usePaidMessageConfirmation(paymentDialogKey, starsForAllMessages, isStarsBalanceModalOpen, starsBalance);
 
   const isPaidSendDeferred = starsForAllMessages > 0 && !shouldPaidMessageAutoApprove;
 
@@ -1628,7 +1636,14 @@ const Composer = ({
       return;
     }
 
-    openTodoListModal({ chatId });
+    const { todoItemsMax, todoTitleLengthMax, todoItemLengthMax } = getGlobal().appConfig;
+    const initialCheckList = parseCheckList(richEditor.getValue(), {
+      maxItemsCount: todoItemsMax,
+      maxTitleLength: todoTitleLengthMax,
+      maxItemLength: todoItemLengthMax,
+    });
+
+    openTodoListModal({ chatId, initialCheckList });
   });
 
   const handleOpenRichInput = useLastCallback(() => {
@@ -1991,22 +2006,57 @@ const Composer = ({
       return;
     }
 
+    const convertedSource = todoListModal?.initialCheckList ? { chatId, threadId } : undefined;
+
     if (isInScheduledList) {
       requestMessageSchedule((scheduledAt, scheduleRepeatPeriod) => {
         handleActionWithPaymentConfirmation(
-          handleMessageSchedule,
+          scheduleTodoList,
           { todo },
           scheduledAt,
           scheduleRepeatPeriod,
           currentMessageList,
+          convertedSource,
         );
       });
     } else {
       handleActionWithPaymentConfirmation(
-        sendMessage,
+        sendTodoList,
         { messageList: currentMessageList, todo, isSilent: isSilentPosting },
+        convertedSource,
       );
     }
+  });
+
+  const sendTodoList = useLastCallback((
+    params: { messageList: MessageList; todo: ApiNewMediaTodo; isSilent?: boolean },
+    convertedSource?: ConvertedCheckListSource,
+  ) => {
+    sendMessage(params);
+    if (convertedSource) clearConvertedDraft(convertedSource);
+  });
+
+  const scheduleTodoList = useLastCallback((
+    args: ScheduledMessageArgs,
+    scheduledAt: number,
+    scheduleRepeatPeriod: number | undefined,
+    messageList: MessageList,
+    convertedSource?: ConvertedCheckListSource,
+  ) => {
+    handleMessageSchedule(args, scheduledAt, scheduleRepeatPeriod, messageList);
+    if (convertedSource) clearConvertedDraft(convertedSource);
+  });
+
+  const clearConvertedDraft = useLastCallback((source: ConvertedCheckListSource) => {
+    clearDraft({ chatId: source.chatId, threadId: source.threadId, isLocalOnly: true });
+
+    if (source.chatId !== chatId || source.threadId !== threadId) {
+      return;
+    }
+
+    requestMeasure(() => {
+      resetComposer(false, isPaidSendDeferred);
+    });
   });
 
   const sendSilent = useLastCallback((additionalArgs?: ScheduledMessageArgs) => {
@@ -2608,11 +2658,13 @@ const Composer = ({
         canScheduleUntilOnline={canSchedule && canScheduleUntilOnline && !isViewOnceEnabled}
         paidMessagesStars={paidMessagesStars}
       />
-      <ToDoListModal
-        modal={todoListModal}
-        onClear={closeTodoListModal}
-        onSend={handleToDoListSend}
-      />
+      {isForCurrentMessageList && (
+        <ToDoListModal
+          modal={todoListModal}
+          onClear={closeTodoListModal}
+          onSend={handleToDoListSend}
+        />
+      )}
       <SendAsMenu
         isOpen={isSendAsMenuOpen}
         onClose={closeSendAsMenu}
@@ -2677,7 +2729,7 @@ const Composer = ({
                   onActivate={handleActivateBotCommandMenu}
                   ariaLabel="Open bot command keyboard"
                 >
-                  <Icon name="menu" />
+                  <Icon name="hamburger" />
                 </ResponsiveHoverButton>
               )}
               {canShowSendAs && sendAsPeer && (
@@ -2765,6 +2817,7 @@ const Composer = ({
           <Button
             round
             faded
+            size="smaller"
             className={buildClassName(
               'rich-editor-button',
               !canToggleRichInput && 'rich-editor-button-hidden',
@@ -2844,7 +2897,7 @@ const Composer = ({
                         color="translucent"
                         onClick={handleAllScheduledClick}
                         ariaLabel={lang('AriaComposerOpenScheduled')}
-                        iconName="scheduled"
+                        iconName="schedule"
                       />
                     )}
                     {Boolean(autoDeletePeriod) && (
@@ -2866,7 +2919,7 @@ const Composer = ({
                         className="composer-action-button"
                         color="translucent"
                         onClick={handleGiftClick}
-                        iconName="closed-gift"
+                        iconName="gift"
                       />
                     )}
                     {shouldShowSuggestedPostButton && (
@@ -3028,7 +3081,7 @@ const Composer = ({
         <Icon name="round-video" />
         {onForward && <Icon name="forward" className="main-button-state-icon" />}
         {isInMessageList && <Icon name="schedule" className="main-button-state-icon" />}
-        {isInMessageList && <Icon name="check-bold" className="main-button-state-icon" />}
+        {isInMessageList && <Icon name="check" className="main-button-state-icon" />}
         {shouldRenderPaidStars && (
           <div ref={paidStarsRef} className="paidStars">
             <Icon name="star" />
@@ -3085,7 +3138,7 @@ const Composer = ({
       )}
       {calendar}
       <PaymentMessageConfirmDialog
-        isOpen={isPaymentMessageConfirmDialogOpen}
+        isOpen={paymentMessageConfirmDialogKey === paymentDialogKey && Boolean(paidMessagesStars)}
         onClose={closeConfirmModalPayForMessage}
         userName={chat ? getPeerTitle(lang, chat) : undefined}
         messagePriceInStars={paidMessagesStars || 0}
@@ -3138,8 +3191,7 @@ export default memo(withGlobal<OwnProps>(
     const emojiKeywords = language !== BASE_EMOJI_KEYWORD_LANG ? global.emojiKeywords[language] : undefined;
     const botKeyboardMessageId = messageWithActualBotKeyboard ? messageWithActualBotKeyboard.id : undefined;
     const keyboardMessage = botKeyboardMessageId
-      ? selectChatMessage(global, chatId, botKeyboardMessageId)
-      || selectEphemeralMessage(global, chatId, botKeyboardMessageId)
+      ? selectChatMessageOrEphemeral(global, chatId, botKeyboardMessageId)
       : undefined;
     const { currentUserId } = global;
     const currentUser = selectUser(global, currentUserId!)!;
@@ -3299,10 +3351,7 @@ export default memo(withGlobal<OwnProps>(
       paidMessagesStars,
       shouldPaidMessageAutoApprove,
       isSilentPosting,
-      isPaymentMessageConfirmDialogOpen: tabState.isPaymentMessageConfirmDialogOpen
-        && !tabState.aiMessageEditorModal
-        && !tabState.pollModal
-        && !tabState.sharePreparedMessageModal,
+      paymentMessageConfirmDialogKey: tabState.paymentMessageConfirmDialogKey,
       starsBalance,
       isStarsBalanceModalOpen,
       shouldDisplayGiftsButton: userFullInfo?.shouldDisplayGiftsButton,
