@@ -81,6 +81,7 @@ export default defineConfig(({ mode }): UserConfig => {
   const defaultAppTitle = `Telegram${appEnv !== 'production' ? ' Beta' : ''}`;
   const baseUrl = env.BASE_URL || PRODUCTION_URL;
   const appTitle = env.APP_TITLE || defaultAppTitle;
+  const appDescription = env.APP_DESCRIPTION || `${appTitle} is a secure private messaging service.`;
   const isProductionApp = appEnv === 'production';
   const appleIcon = isProductionApp ? 'apple-touch-icon' : 'apple-touch-icon-dev';
   const mainIcon = isProductionApp ? 'icon-192x192' : 'icon-dev-192x192';
@@ -221,6 +222,7 @@ export default defineConfig(({ mode }): UserConfig => {
     TG_APP_NAME: env.APP_NAME || '',
     TG_APP_TITLE: appTitle,
     TG_PUBLIC_URL: baseUrl,
+    TG_APP_DESCRIPTION: appDescription,
     TG_FAQ_URL: env.FAQ_URL || 'https://telegram.org/faq',
     TG_PRIVACY_URL: env.PRIVACY_URL || 'https://telegram.org/privacy',
     TG_CSP: csp,
