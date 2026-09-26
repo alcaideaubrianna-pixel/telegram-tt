@@ -221,6 +221,8 @@ export default defineConfig(({ mode }): UserConfig => {
     TG_APP_NAME: env.APP_NAME || '',
     TG_APP_TITLE: appTitle,
     TG_PUBLIC_URL: baseUrl,
+    TG_FAQ_URL: env.FAQ_URL || 'https://telegram.org/faq',
+    TG_PRIVACY_URL: env.PRIVACY_URL || 'https://telegram.org/privacy',
     TG_CSP: csp,
     TG_APPLE_ICON: appleIcon,
     TG_MAIN_ICON: mainIcon,
