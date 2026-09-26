@@ -45,7 +45,7 @@ export function hasStoredSession() {
 export function storeSession(sessionData: ApiSessionData) {
   return updateSessionStorage(() => {
     const {
-      mainDcId, keys, isTest,
+      mainDcId, keys, isTest, telesrvInstanceId,
     } = sessionData;
 
     const currentSlotData = loadSlotSession(ACCOUNT_SLOT);
@@ -53,20 +53,24 @@ export function storeSession(sessionData: ApiSessionData) {
       ...currentSlotData,
       dcId: mainDcId,
       isTest,
+      telesrvInstanceId,
     };
+
+    if (currentSlotData?.telesrvInstanceId !== telesrvInstanceId) {
+      DC_IDS.forEach((dcId) => {
+        delete newSlotData[`dc${dcId}_auth_key`];
+        delete newSlotData[`dc${dcId}_server_salt`];
+      });
+    }
 
     Object.keys(keys).map(Number).forEach((dcId) => {
       newSlotData[`dc${dcId as DcId}_auth_key`] = keys[dcId];
     });
 
-  if (!ACCOUNT_SLOT) {
-    storeLegacySession(sessionData, currentSlotData?.userId);
-  }
     if (!ACCOUNT_SLOT) {
       storeLegacySession(sessionData, currentSlotData?.userId);
     }
 
-  writeSlotSession(ACCOUNT_SLOT, newSlotData);
     writeSessionValue(`${SESSION_ACCOUNT_PREFIX}${ACCOUNT_SLOT || 1}`, JSON.stringify(newSlotData));
   });
 }
